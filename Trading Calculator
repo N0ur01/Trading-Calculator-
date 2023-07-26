@@ -1,0 +1,143 @@
+import numpy as np
+
+# Take input data from the user
+starting_balance = float(input("Enter the starting balance: "))
+num_trades_yearly = int(input("Enter the number of trades per year: "))
+winning_rate = int(input("Enter the winning rate (as a percentage): ")) / 100
+risk_to_reward_ratio = float(input("Enter the risk to reward ratio: "))
+risk_per_trade = float(input("Enter the risk per trade (as a percentage): ")) / 100
+
+# Take input data from the user for the number of years to simulate
+num_years = int(input("How many years would you like to calculate? "))
+
+# Initialize an array to store the monthly deposit and withdrawal amount for each year
+deposit_monthly = np.zeros(num_years)
+withdraw_monthly = np.zeros(num_years)
+
+# Take input data from the user for the monthly deposit and withdrawal amount for each year
+years_remaining = num_years
+while years_remaining > 0:
+    # Ask the user how many years they would like to deposit a certain amount
+    deposit_years = input(f"For how many of the remaining {years_remaining} years would you like to deposit a certain monthly amount? (Enter a number or 'None' to stop): ")
+    if deposit_years.lower() == "none":
+        # Ask the user if they would like to withdraw a certain amount monthly
+        withdraw_option = input("Do you want to withdraw monthly? (Enter 'Yes' or 'No'): ")
+        if withdraw_option.lower() == "yes":
+            # Ask the user how many years they would like to withdraw a certain amount
+            withdraw_years = int(input(f"For how many of the remaining {years_remaining} years would you like to withdraw a certain monthly amount? "))
+           
+            # Ask the user for the monthly withdrawal amount for these years
+            withdraw_amount = float(input(f"What is the monthly withdrawal amount for these {withdraw_years} years? "))
+           
+            # Update the monthly withdrawal amount for these years
+            start_year = num_years - years_remaining
+            end_year = start_year + withdraw_years
+            withdraw_monthly[start_year:end_year] = withdraw_amount
+           
+            # Update the number of years remaining
+            years_remaining -= withdraw_years
+        break
+    deposit_years = int(deposit_years)
+   
+    # Ask the user for the monthly deposit amount for these years
+    deposit_amount = float(input(f"What is the monthly deposit amount for these {deposit_years} years? "))
+   
+    # Update the monthly deposit amount for these years
+    start_year = num_years - years_remaining
+    end_year = start_year + deposit_years
+    deposit_monthly[start_year:end_year] = deposit_amount
+   
+    # Update the number of years remaining
+    years_remaining -= deposit_years
+
+# Calculate variables based on input data
+num_winning_trades = int(num_trades_yearly * winning_rate)
+num_losing_trades = num_trades_yearly - num_winning_trades
+
+# Set variables for simulation
+num_simulations = 100000
+
+# Initialize arrays to store variables for each simulation and year
+total_gains = np.zeros((num_simulations, num_years))
+max_drawdowns = np.zeros((num_simulations, num_years))
+average_win_per_trade = np.zeros((num_simulations, num_years))
+average_loss_per_trade = np.zeros((num_simulations, num_years))
+total_wins_trades = np.zeros((num_simulations, num_years))
+total_losses_trades = np.zeros((num_simulations, num_years))
+starting_balances = np.zeros((num_simulations, num_years))
+
+# Run simulations
+for i in range(num_simulations):
+    # Initialize variables for this simulation
+    balance = starting_balance
+   
+    # Simulate each year
+    for j in range(num_years):
+        starting_balances[i,j] = balance
+        
+        # Generate a random sequence of winning and losing trades for this year
+        trade_sequence = np.random.choice([1, -1], size=num_trades_yearly, p=[winning_rate, 1-winning_rate])
+       
+        # Calculate variables for this year
+        total_gain = 1
+        max_drawdown = 0
+        
+        total_commission=0
+        
+        for trade in trade_sequence:
+            if trade == 1:
+                total_gain *= (1 + risk_per_trade * risk_to_reward_ratio)
+            else:
+                total_gain *= (1 - risk_per_trade)
+            max_drawdown = min(max_drawdown, total_gain - 1)
+        
+        average_win_per_trade[i,j] = balance * risk_per_trade * risk_to_reward_ratio
+        average_loss_per_trade[i,j] = balance * risk_per_trade
+        total_wins_trades[i,j] = num_winning_trades
+        total_losses_trades[i,j] = num_losing_trades
+        
+        # Update the balance based on the total gain, monthly deposit and withdrawal amount for this year
+        balance *= total_gain
+        balance += (deposit_monthly[j] - withdraw_monthly[j]) * 12
+        
+        # Store the total gain and max drawdown for this simulation and year
+        total_gains[i,j] = total_gain - 1
+        max_drawdowns[i,j] = max_drawdown
+
+# Calculate the average of variables across all simulations and years
+average_total_gains = np.mean(total_gains, axis=0)
+maximum_drawdowns = np.min(max_drawdowns, axis=0)
+average_average_win_per_trade = np.mean(average_win_per_trade, axis=0)
+average_average_loss_per_trade = np.mean(average_loss_per_trade, axis=0)
+average_total_wins_trades = np.mean(total_wins_trades, axis=0)
+average_total_losses_trades = np.mean(total_losses_trades, axis=0)
+average_starting_balances = np.mean(starting_balances, axis=0)
+
+# Calculate the new balance after each year based on the average total gain
+new_balances = np.zeros(num_years)
+new_balances[0] = starting_balance * (1 + average_total_gains[0]) + (deposit_monthly[0] - withdraw_monthly[0]) * 12
+for i in range(1, num_years):
+    new_balances[i] = new_balances[i-1] * (1 + average_total_gains[i]) + (deposit_monthly[i] - withdraw_monthly[i]) * 12
+
+# Calculate the total deposit and withdrawal amount after each year
+total_deposit_amounts = np.cumsum(deposit_monthly) * 12
+total_withdrawal_amounts = np.cumsum(withdraw_monthly) * 12
+
+# Print the results for each year
+for i in range(num_years):
+    print("Year " + str(i+1) + ":")
+    print("  AVG Win: ${:.2f}".format(average_average_win_per_trade[i]))
+    print("  AVG Loss: ${:.2f}".format(average_average_loss_per_trade[i]))
+    print("  AVG R/R: {:.2f}".format(risk_to_reward_ratio))
+    print("  Total Wins: {:.2f}".format(average_total_wins_trades[i]))
+    print("  Total Losses: {:.2f}".format(average_total_losses_trades[i]))
+    print("  Winning %: {:.2f}%".format(winning_rate*100))
+    print("  Starting Balance: ${:.2f}".format(average_starting_balances[i]))
+    print("  Total Balance: ${:.2f}".format(new_balances[i]))
+    print("  Total $ Gain: ${:.2f}".format(new_balances[i]-starting_balance))
+    print("  AVG Total Gain %: {:.2f}%".format((average_total_gains[i]) * 100))
+    print("  Max Drawdown: {:.2f}%".format(maximum_drawdowns[i] * 100))
+    print("  Monthly Deposit: ${:.2f}".format(deposit_monthly[i]))
+    print("  Monthly Withdrawal: ${:.2f}".format(withdraw_monthly[i]))
+    print("  Total Monthly Deposit: ${:.2f}".format(total_deposit_amounts[i]))
+    print("  Total Monthly Withdrawal: ${:.2f}".format(total_withdrawal_amounts[i]))
